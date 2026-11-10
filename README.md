@@ -76,13 +76,15 @@ arguments are visible to other users in `ps`.
 
 ```
 $ ./SpeedTest --help
-SpeedTest++ version 1.8
+SpeedTest++ version 1.15
 Speedtest.net command line interface
 Info: https://github.com/taganaka/SpeedTest
+Fixed: https://github.com/gglluukk/SpeedTest
 Author: Francesco Laurita <francesco.laurita@gmail.com>
 
 Usage: ./SpeedTest  [--latency] [--quality] [--download] [--upload] [--share] [--help]
-      [--test-server host:port] [--quality-server host:port] [--output verbose|text]
+      [--test-server host:port] [--output verbose|text|json]
+      [--ipapi-key KEY | --ipapi-key-file PATH]
 optional arguments:
   --help                      Show this message and exit
   --latency                   Perform latency test only
@@ -90,11 +92,17 @@ optional arguments:
   --download                  Perform download test only. It includes latency test
   --upload                    Perform upload test only. It includes latency test
   --share                     Generate and provide a URL to the speedtest.net share results image
+  --insecure                  Skip SSL certificate verify (Useful for Embedded devices)
   --test-server host:port     Run speed test against a specific server
   --quality-server host:port  Run line quality test against a specific server
-  --output verbose|text       Set output type. Default: verbose
+  --output verbose|text|json  Set output type. Default: verbose
+  --ipapi-key KEY             ipapi.is API key used for the IP/location lookup
+  --ipapi-key-file PATH       Read the ipapi.is API key from a file
+                              (also: $IPAPI_KEY, or ~/.config/SpeedTest/ipapi.key)
 $
 ```
+
+See [IP lookup API key (ipapi.is)](#ip-lookup-api-key-ipapiis) for how the API key is resolved.
 
 ## License
 
