@@ -5,6 +5,50 @@
 #include "TestConfigTemplate.h"
 #include "CmdOptions.h"
 #include <csignal>
+#include <cstdlib>
+#include <fstream>
+
+// Reads the first non-empty line of a file, trimmed. Returns false if the file can't be read.
+static bool readKeyFile(const std::string& path, std::string& key){
+    std::ifstream in(path);
+    if (!in)
+        return false;
+    std::string line;
+    while (std::getline(in, line)){
+        auto start = line.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos)
+            continue;
+        auto end = line.find_last_not_of(" \t\r\n");
+        key = line.substr(start, end - start + 1);
+        return true;
+    }
+    return false;
+}
+
+// Resolves the ipapi.is API key. Order: --ipapi-key, --ipapi-key-file, $IPAPI_KEY,
+// then the default file ~/.config/SpeedTest/ipapi.key (if it exists).
+static bool resolveIpApiKey(const ProgramOptions& options, std::string& key){
+    if (!options.ipapi_key.empty()){
+        key = options.ipapi_key;
+        return true;
+    }
+    if (!options.ipapi_key_file.empty()){
+        if (!readKeyFile(options.ipapi_key_file, key)){
+            std::cerr << "Unable to read API key from " << options.ipapi_key_file << std::endl;
+            return false;
+        }
+        return true;
+    }
+    const char* env = std::getenv("IPAPI_KEY");
+    if (env && *env){
+        key = env;
+        return true;
+    }
+    const char* home = std::getenv("HOME");
+    if (home && *home)
+        readKeyFile(std::string(home) + "/.config/SpeedTest/ipapi.key", key);
+    return true;
+}
 
 void banner(){
     std::cout << "SpeedTest++ version " << SpeedTest_VERSION_MAJOR << "." << SpeedTest_VERSION_MINOR << std::endl;
@@ -17,7 +61,8 @@ void banner(){
 void usage(const char* name){
     std::cerr << "Usage: " << name << " ";
     std::cerr << " [--latency] [--quality] [--download] [--upload] [--share] [--help]\n"
-            "      [--test-server host:port] [--output verbose|text|json]\n";
+            "      [--test-server host:port] [--output verbose|text|json]\n"
+            "      [--ipapi-key KEY | --ipapi-key-file PATH]\n";
     std::cerr << "optional arguments:" << std::endl;
     std::cerr << "  --help                      Show this message and exit\n";
     std::cerr << "  --latency                   Perform latency test only\n";
@@ -29,6 +74,9 @@ void usage(const char* name){
     std::cerr << "  --test-server host:port     Run speed test against a specific server\n";
     std::cerr << "  --quality-server host:port  Run line quality test against a specific server\n";
     std::cerr << "  --output verbose|text|json  Set output type. Default: verbose\n";
+    std::cerr << "  --ipapi-key KEY             ipapi.is API key used for the IP/location lookup\n";
+    std::cerr << "  --ipapi-key-file PATH       Read the ipapi.is API key from a file\n";
+    std::cerr << "                              (also: $IPAPI_KEY, or ~/.config/SpeedTest/ipapi.key)\n";
 }
 
 int main(const int argc, const char **argv) {
@@ -62,6 +110,11 @@ int main(const int argc, const char **argv) {
     if (programOptions.insecure) {
         sp.setInsecure(programOptions.insecure);
     }
+
+    std::string ipApiKey;
+    if (!resolveIpApiKey(programOptions, ipApiKey))
+        return EXIT_FAILURE;
+    sp.setIpInfoApiKey(ipApiKey);
 
     if (programOptions.output_type == OutputType::json)
         std::cout << "{";

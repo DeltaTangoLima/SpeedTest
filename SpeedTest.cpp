@@ -25,6 +25,10 @@ SpeedTest::~SpeedTest() {
     mServerList.clear();
 }
 
+void SpeedTest::setIpInfoApiKey(const std::string& key) {
+    mIpInfoApiKey = key;
+}
+
 bool SpeedTest::ipInfo(IPInfo& info) {
 
     if (!mIpInfo.ip_address.empty()){
@@ -32,24 +36,63 @@ bool SpeedTest::ipInfo(IPInfo& info) {
         return true;
     }
 
-    std::stringstream oss;
-    auto code = httpGet(SPEED_TEST_IP_INFO_API_URL, oss);
-    if (code == CURLE_OK){
-        auto values = SpeedTest::parseJSON(oss.str());
-        mIpInfo = IPInfo();
-        try {
-            mIpInfo.ip_address = values["ip_address"];
-            mIpInfo.isp = values["isp"];
-            mIpInfo.lat = std::stof(values["lat"]);
-            mIpInfo.lon = std::stof(values["lon"]);
-        } catch(...) {}
-        values.clear();
-        oss.clear();
-        info = mIpInfo;
-        return true;
+    CURL* curl = curl_easy_init();
+    if (!curl)
+        return false;
+
+    std::string url = SPEED_TEST_IP_INFO_API_URL;
+    if (!mIpInfoApiKey.empty()){
+        char *escaped = curl_easy_escape(curl, mIpInfoApiKey.c_str(), static_cast<int>(mIpInfoApiKey.size()));
+        if (escaped){
+            url += "?key=";
+            url += escaped;
+            curl_free(escaped);
+        }
     }
 
-    return false;
+    std::stringstream oss;
+    auto code = httpGet(url, oss, curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+
+    if (code != CURLE_OK){
+        std::cerr << "IP info request failed: " << curl_easy_strerror(code) << std::endl;
+        return false;
+    }
+
+    auto body = oss.str();
+    auto values = SpeedTest::parseJSON(body);
+    IPInfo parsed;
+    try {
+        parsed.ip_address = values["ip_address"];
+        parsed.isp = values["isp"];
+        parsed.lat = std::stof(values["lat"]);
+        parsed.lon = std::stof(values["lon"]);
+    } catch(...) {}
+
+    if (http_code != 200 || parsed.ip_address.empty()){
+        // Surface the API's own message (e.g. rate limit / bad key) to help diagnose.
+        std::string message;
+        try {
+            auto obj = json::JSON::Load(body);
+            if (obj.hasKey("error"))
+                message = obj["error"].ToString();
+            else if (obj.hasKey("message"))
+                message = obj["message"].ToString();
+        } catch(...) {}
+        if (message.empty())
+            message = body.substr(0, 200);
+        std::cerr << "IP info API returned HTTP " << http_code << ": " << message << std::endl;
+        if (mIpInfoApiKey.empty())
+            std::cerr << "Hint: anonymous ipapi.is requests are rate limited; "
+                         "pass a free API key with --ipapi-key-file or IPAPI_KEY" << std::endl;
+        return false;
+    }
+
+    mIpInfo = parsed;
+    info = mIpInfo;
+    return true;
 }
 
 const std::vector<ServerInfo>& SpeedTest::serverList() {

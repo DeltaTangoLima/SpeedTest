@@ -40,6 +40,7 @@ public:
     const ServerInfo bestServer(int sample_size = 5, std::function<void(bool)> cb = nullptr);
     bool setServer(ServerInfo& server);
     void setInsecure(bool insecure = false);
+    void setIpInfoApiKey(const std::string& key);
     const long &latency();
     bool downloadSpeed(const ServerInfo& server, const TestConfig& config, double& result, std::function<void(bool)> cb = nullptr);
     bool uploadSpeed(const ServerInfo& server, const TestConfig& config, double& result, std::function<void(bool)> cb = nullptr);
@@ -59,6 +60,7 @@ private:
         static T harversine(std::pair<T, T> n1, std::pair<T, T> n2);
 
     IPInfo mIpInfo;
+    std::string mIpInfoApiKey;
     std::vector<ServerInfo> mServerList;
     long mLatency;
     double mUploadSpeed;

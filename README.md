@@ -57,6 +57,21 @@ $ cmake -DCMAKE_BUILD_TYPE=Release .
 $ sudo make install
 ```
 
+## IP lookup API key (ipapi.is)
+
+SpeedTest++ uses [ipapi.is](https://ipapi.is/) to find your public IP and location.
+Anonymous requests are heavily rate limited, which shows up as
+`Unable to retrieve your IP info. Try again later`. A free API key
+(1000 requests/day) avoids this. The key is taken from the first of:
+
+1. `--ipapi-key KEY`
+2. `--ipapi-key-file PATH` (first non-empty line of the file)
+3. the `IPAPI_KEY` environment variable
+4. `~/.config/SpeedTest/ipapi.key`, if it exists
+
+A key file is preferable to `--ipapi-key` for scheduled runs, since command-line
+arguments are visible to other users in `ps`.
+
 ## Usage
 
 ```

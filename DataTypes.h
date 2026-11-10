@@ -12,8 +12,8 @@ static const float EARTH_RADIUS_KM = 6371.0;
 typedef struct ip_info_t {
     std::string ip_address;
     std::string isp;
-    float lat;
-    float lon;
+    float lat = 0;
+    float lon = 0;
 } IPInfo;
 
 typedef struct server_info_t {

@@ -17,6 +17,8 @@ typedef struct program_options_t {
     bool share    = false;
     bool insecure = false;
     std::string selected_server = "";
+    std::string ipapi_key = "";
+    std::string ipapi_key_file = "";
     OutputType output_type = OutputType::verbose;
 } ProgramOptions;
 
@@ -29,10 +31,12 @@ static struct option CmdLongOptions[] = {
         {"insecure",    no_argument,       0, 'i' },
         {"test-server", required_argument, 0, 't' },
         {"output",      required_argument, 0, 'o' },
+        {"ipapi-key",      required_argument, 0, 'k' },
+        {"ipapi-key-file", required_argument, 0, 'K' },
         {0,             0,                 0,  0  }
 };
 
-const char *optStr = "hldusiqt:o:";
+const char *optStr = "hldusiqt:o:k:K:";
 
 bool ParseOptions(const int argc, const char **argv, ProgramOptions& options){
     int long_index =0;
@@ -59,6 +63,12 @@ bool ParseOptions(const int argc, const char **argv, ProgramOptions& options){
                 break;
             case 't':
                 options.selected_server.append(optarg);
+                break;
+            case 'k':
+                options.ipapi_key = optarg;
+                break;
+            case 'K':
+                options.ipapi_key_file = optarg;
                 break;
             case 'o':
                 if (strcmp(optarg, "verbose") == 0)
