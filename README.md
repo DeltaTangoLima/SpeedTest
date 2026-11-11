@@ -1,3 +1,14 @@
+> [!WARNING]
+> **About this fork:** the changes in this fork were written by an AI coding assistant
+> (Anthropic's Claude, via Claude Code), not by me. I have only given them a cursory
+> review and some basic testing, and have not otherwise vetted them. Use at your own risk.
+>
+> The changes, on top of [gglluukk/SpeedTest](https://github.com/gglluukk/SpeedTest):
+> - ipapi.is API key support (`--ipapi-key`, `--ipapi-key-file`, `$IPAPI_KEY`, `~/.config/SpeedTest/ipapi.key`)
+> - Fallback to ipinfo.io and ipwho.is when the ipapi.is lookup fails
+> - `cmake_minimum_required` raised to 3.5 so it configures with current CMake
+> - README updates
+
 [![Build Status](https://travis-ci.org/taganaka/SpeedTest.svg?branch=master)](https://travis-ci.org/taganaka/SpeedTest)
 
 # SpeedTest++
