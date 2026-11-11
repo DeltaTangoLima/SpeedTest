@@ -29,53 +29,94 @@ void SpeedTest::setIpInfoApiKey(const std::string& key) {
     mIpInfoApiKey = key;
 }
 
-bool SpeedTest::ipInfo(IPInfo& info) {
+namespace {
 
-    if (!mIpInfo.ip_address.empty()){
-        info = mIpInfo;
+// Reads a JSON number, or a number held in a string, as a float.
+bool jsonFloat(json::JSON& value, float& out) {
+    try {
+        std::string text = value.JSONType() == json::JSON::Class::String ? value.ToString() : value.dump();
+        out = std::stof(text);
         return true;
+    } catch(...) {
+        return false;
     }
+}
 
+bool parseIpapiIs(json::JSON& obj, IPInfo& info) {
+    info.ip_address = obj["ip"].ToString();
+    info.isp = obj["company"]["name"].ToString();
+    return jsonFloat(obj["location"]["latitude"], info.lat)
+        && jsonFloat(obj["location"]["longitude"], info.lon);
+}
+
+bool parseIpinfoIo(json::JSON& obj, IPInfo& info) {
+    info.ip_address = obj["ip"].ToString();
+    // "org" looks like "AS4764 Aussie Fibre Pty Ltd"; drop the AS number.
+    info.isp = obj["org"].ToString();
+    if (info.isp.compare(0, 2, "AS") == 0){
+        auto space = info.isp.find(' ');
+        if (space != std::string::npos)
+            info.isp = info.isp.substr(space + 1);
+    }
+    // "loc" is "lat,lon".
+    auto loc = obj["loc"].ToString();
+    auto comma = loc.find(',');
+    if (comma == std::string::npos)
+        return false;
+    try {
+        info.lat = std::stof(loc.substr(0, comma));
+        info.lon = std::stof(loc.substr(comma + 1));
+    } catch(...) {
+        return false;
+    }
+    return true;
+}
+
+bool parseIpwhoIs(json::JSON& obj, IPInfo& info) {
+    if (obj.hasKey("success") && !obj["success"].ToBool())
+        return false;
+    info.ip_address = obj["ip"].ToString();
+    info.isp = obj["connection"]["isp"].ToString();
+    return jsonFloat(obj["latitude"], info.lat)
+        && jsonFloat(obj["longitude"], info.lon);
+}
+
+struct IpInfoProvider {
+    const char* name;
+    std::string url;
+    bool (*parse)(json::JSON&, IPInfo&);
+};
+
+bool fetchIpInfo(SpeedTest& sp, const std::string& name, const std::string& url,
+                 bool (*parse)(json::JSON&, IPInfo&), IPInfo& info) {
     CURL* curl = curl_easy_init();
     if (!curl)
         return false;
 
-    std::string url = SPEED_TEST_IP_INFO_API_URL;
-    if (!mIpInfoApiKey.empty()){
-        char *escaped = curl_easy_escape(curl, mIpInfoApiKey.c_str(), static_cast<int>(mIpInfoApiKey.size()));
-        if (escaped){
-            url += "?key=";
-            url += escaped;
-            curl_free(escaped);
-        }
-    }
-
     std::stringstream oss;
-    auto code = httpGet(url, oss, curl);
+    auto code = sp.httpGet(url, oss, curl, 15);
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);
 
     if (code != CURLE_OK){
-        std::cerr << "IP info request failed: " << curl_easy_strerror(code) << std::endl;
+        std::cerr << name << " lookup failed: " << curl_easy_strerror(code) << std::endl;
         return false;
     }
 
     auto body = oss.str();
-    auto values = SpeedTest::parseJSON(body);
+    json::JSON obj;
     IPInfo parsed;
+    bool ok = false;
     try {
-        parsed.ip_address = values["ip_address"];
-        parsed.isp = values["isp"];
-        parsed.lat = std::stof(values["lat"]);
-        parsed.lon = std::stof(values["lon"]);
+        obj = json::JSON::Load(body);
+        ok = http_code == 200 && parse(obj, parsed) && !parsed.ip_address.empty();
     } catch(...) {}
 
-    if (http_code != 200 || parsed.ip_address.empty()){
+    if (!ok){
         // Surface the API's own message (e.g. rate limit / bad key) to help diagnose.
         std::string message;
         try {
-            auto obj = json::JSON::Load(body);
             if (obj.hasKey("error"))
                 message = obj["error"].ToString();
             else if (obj.hasKey("message"))
@@ -83,16 +124,52 @@ bool SpeedTest::ipInfo(IPInfo& info) {
         } catch(...) {}
         if (message.empty())
             message = body.substr(0, 200);
-        std::cerr << "IP info API returned HTTP " << http_code << ": " << message << std::endl;
-        if (mIpInfoApiKey.empty())
-            std::cerr << "Hint: anonymous ipapi.is requests are rate limited; "
-                         "pass a free API key with --ipapi-key-file or IPAPI_KEY" << std::endl;
+        std::cerr << name << " lookup failed: HTTP " << http_code << ": " << message << std::endl;
         return false;
     }
 
-    mIpInfo = parsed;
-    info = mIpInfo;
+    info = parsed;
     return true;
+}
+
+} // namespace
+
+bool SpeedTest::ipInfo(IPInfo& info) {
+
+    if (!mIpInfo.ip_address.empty()){
+        info = mIpInfo;
+        return true;
+    }
+
+    std::string ipapiUrl = SPEED_TEST_IP_INFO_API_URL;
+    if (!mIpInfoApiKey.empty()){
+        CURL* curl = curl_easy_init();
+        char *escaped = curl ? curl_easy_escape(curl, mIpInfoApiKey.c_str(), static_cast<int>(mIpInfoApiKey.size())) : nullptr;
+        if (escaped){
+            ipapiUrl += "?key=";
+            ipapiUrl += escaped;
+            curl_free(escaped);
+        }
+        if (curl)
+            curl_easy_cleanup(curl);
+    }
+
+    // Tried in order; the first one that answers wins.
+    const IpInfoProvider providers[] = {
+        {"ipapi.is",  ipapiUrl,                      parseIpapiIs},
+        {"ipinfo.io", SPEED_TEST_IPINFO_API_URL,     parseIpinfoIo},
+        {"ipwho.is",  SPEED_TEST_IPWHOIS_API_URL,    parseIpwhoIs},
+    };
+
+    for (const auto& provider : providers){
+        IPInfo parsed;
+        if (fetchIpInfo(*this, provider.name, provider.url, provider.parse, parsed)){
+            mIpInfo = parsed;
+            info = mIpInfo;
+            return true;
+        }
+    }
+    return false;
 }
 
 const std::vector<ServerInfo>& SpeedTest::serverList() {

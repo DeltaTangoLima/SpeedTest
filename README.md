@@ -59,10 +59,15 @@ $ sudo make install
 
 ## IP lookup API key (ipapi.is)
 
-SpeedTest++ uses [ipapi.is](https://ipapi.is/) to find your public IP and location.
-Anonymous requests are heavily rate limited, which shows up as
-`Unable to retrieve your IP info. Try again later`. A free API key
-(1000 requests/day) avoids this. The key is taken from the first of:
+SpeedTest++ needs your public IP and location to pick the nearest server. It asks
+[ipapi.is](https://ipapi.is/) first, and if that fails falls back to
+[ipinfo.io](https://ipinfo.io/) and then [ipwho.is](https://ipwho.is/) (neither needs a key).
+Each failed provider is reported on stderr; the run only fails with
+`Unable to retrieve your IP info. Try again later` if all three fail.
+
+Anonymous ipapi.is requests are heavily rate limited, and ipapi.is may block IPs it
+believes are VPNs or proxies outright. A free API key (1000 requests/day) avoids the
+rate limit. The key is taken from the first of:
 
 1. `--ipapi-key KEY`
 2. `--ipapi-key-file PATH` (first non-empty line of the file)
